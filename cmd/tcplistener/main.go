@@ -3,23 +3,23 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
+	"log"
+	"net"
 	"strings"
 )
 
-// getLinesChannel reads from an io.ReadCloser in chunks and sends full lines to a channel.
-func getLinesChannel(f io.ReadCloser) <-chan string {
+func getLinesChannel(conn io.ReadCloser) <-chan string {
 	lines := make(chan string)
 
 	go func() {
 		defer close(lines)
-		defer f.Close()
+		defer conn.Close()
 
 		var currentLine string
 		buf := make([]byte, 8)
 
 		for {
-			n, err := f.Read(buf)
+			n, err := conn.Read(buf)
 			if err != nil {
 				if err == io.EOF {
 					break
@@ -48,13 +48,28 @@ func getLinesChannel(f io.ReadCloser) <-chan string {
 }
 
 func main() {
-	file, err := os.Open("messages.txt")
+	ln, err := net.Listen("tcp", ":42069")
 	if err != nil {
-		fmt.Println("Error opening file:", err)
+		fmt.Println("Error starting server:", err)
 		return
 	}
 
-	for line := range getLinesChannel(file) {
-		fmt.Printf("read: %s\n", line)
+	defer ln.Close()
+
+	fmt.Println("Listening on port :42069...")
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Fatal("Error accepting connection")
+		}
+
+		fmt.Println("Connection Accepted")
+
+		go func(c net.Conn) {
+			for line := range getLinesChannel(c) {
+				fmt.Println(line)
+			}
+		}(conn)
 	}
 }
